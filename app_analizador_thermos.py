@@ -1,4 +1,3 @@
-
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -223,7 +222,30 @@ if archivo is None:
 try:
     xls = pd.ExcelFile(archivo)
     hoja = "SEGUIMIENTO" if "SEGUIMIENTO" in xls.sheet_names else xls.sheet_names[0]
-    df = pd.read_excel(archivo, sheet_name=hoja)
+    # Los reportes de Thermo pueden traer varias filas informativas antes de
+    # los encabezados reales. Buscamos automáticamente la fila que contiene
+    # Fecha + Hora + temperatura (°C) y usamos esa fila como encabezado.
+    muestra = pd.read_excel(archivo, sheet_name=hoja, header=None, nrows=30)
+    fila_encabezado = None
+    for i in range(len(muestra)):
+        valores = [str(v).strip().lower() for v in muestra.iloc[i].tolist() if pd.notna(v)]
+        tiene_fecha = any(v == "fecha" for v in valores)
+        tiene_hora = any(v == "hora" for v in valores)
+        tiene_temp = any(
+            v in {"°c", "° c", "temperatura", "temp", "temperature"}
+            or "temperatura" in v
+            for v in valores
+        )
+        if tiene_fecha and tiene_hora and tiene_temp:
+            fila_encabezado = i
+            break
+
+    if fila_encabezado is not None:
+        df = pd.read_excel(archivo, sheet_name=hoja, header=fila_encabezado)
+    else:
+        df = pd.read_excel(archivo, sheet_name=hoja)
+
+    df = df.dropna(axis=1, how="all").dropna(axis=0, how="all")
 
     resumen, detalle, meta = analizar(df, hoja)
 
